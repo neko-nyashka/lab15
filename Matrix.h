@@ -41,15 +41,14 @@ public:
     Matrix &id(int);
     void transpose();
     double get_det(const Matrix& m = Matrix<T>::create_zero_matrix(0));
-    double parallel_get_det();
     void print_to_file();
     void read_from_file(const std::string &name);
 
-
+    double parallel_get_det(int);
     Matrix parallel_multiply(int, int) const;
     Matrix parallel_sum(Matrix const &, int) const;
     Matrix parallel_multiply_matrices(Matrix const &, int) const;
-    Matrix parallel_inverse_matrix();
+    Matrix parallel_inverse_matrix(int);
 
 
     Matrix async_sum(Matrix const &, int) const;

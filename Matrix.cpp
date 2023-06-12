@@ -469,13 +469,13 @@ Matrix<T> Matrix<T>::create_identity_matrix(int size)
 
 
 template <typename T>
-double Matrix<T>::parallel_get_det() 
+double Matrix<T>::parallel_get_det(int blocks) 
 {
-    if (this -> n == 1)
+    if (n == 1)
     {
-        return this-> matrix[0][0];
+        return matrix[0][0];
     }
-    if (this -> n == 2)
+    if (n == 2)
     {
         return matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0];
     }
@@ -483,46 +483,57 @@ double Matrix<T>::parallel_get_det()
     {
         double d = 0;
         std::vector<std::thread> threads;
-        std::vector<double> determinants(this->n, 0);
+        std::vector<double> determinants(n, 0);
 
-        for (int k = 0; k < this->n; ++k)
+        int block_size = n / blocks;
+        int last_block_size = n - (blocks - 1) * block_size;
+
+        for (int b = 0; b < blocks; ++b)
         {
-            threads.emplace_back([&, k]() 
+            threads.emplace_back([&, b]() 
             {
-                Matrix newm(n - 1, m - 1);
-                for (int i = 1; i < this->n; ++i)
+                int start_row = b * block_size;
+                int end_row = start_row + (b == blocks - 1 ? last_block_size : block_size);
+
+                for (int k = 0; k < n; ++k)
                 {
-                    int t = 0;
-                    for (int j = 0; j < this->m; ++j)
+                    if (k < start_row || k >= end_row) continue;
+
+                    Matrix newm(n - 1, m - 1);
+                    for (int i = 1; i < n; ++i)
                     {
-                        if (j == k) continue;
-                        newm.matrix[i - 1][t] = matrix[i][j];
-                        ++t;
+                        int t = 0;
+                        for (int j = 0; j < m; ++j)
+                        {
+                            if (j == k) continue;
+                            newm.matrix[i - 1][t] = matrix[i][j];
+                            ++t;
+                        }
                     }
+                    determinants[k] = std::pow(-1, k + 2) * matrix[0][k] * get_det(newm);
                 }
-            determinants[k] = std::pow(-1, k + 2) * matrix[0][k] * get_det(newm);
             });
-    }
+        }
 
-    for (auto& thread : threads)
-    {
-        thread.join();
-    }
+        for (auto& thread : threads)
+        {
+            thread.join();
+        }
 
-    for (double determinant : determinants)
-    {
-        d += determinant;
-    }
+        for (double determinant : determinants)
+        {
+            d += determinant;
+        }
 
-    return d;
+        return d;
     }
 }
 
 
 template <typename T>
-Matrix<T> Matrix<T>::parallel_inverse_matrix()
+Matrix<T> Matrix<T>::parallel_inverse_matrix(int blocks)
 {
-    double det = parallel_get_det();
+    double det = parallel_get_det(blocks);
     if (!det) throw std::runtime_error("Matrix cannot be reversed.");
 
     Matrix newm(n, m);
@@ -759,10 +770,22 @@ Matrix<T> Matrix<T>::async_multiply_matrices( Matrix<T> const &a, int blocks) co
 
 int main()
 {
-    Matrix<double> a, b;
-    std::vector<std::string> v = {"1.txt","2.txt","3.txt","4.txt","5.txt"};
+    Matrix<double> a, b,c(100,10),d(10000,100);
+    std::vector<std::string> v = {"0.txt","1.txt","2.txt","3.txt","4.txt","5.txt"};
     a.read_from_file(v[0]);
-    b = a.async_multiply_matrices(a,3);
-    b.print();
+    for (int i = 0; i < 4 ; i++)
+    {
+        Matrix<double> a,b;
+        if (i==2) continue;
+        a.read_from_file(v[i]);
+        // if ((i < 2)||(i==3)||(i==5)) b=a; 
+        // if (i == 2) b=c;
+        // if (i==4) b=d;
+        auto start_time = std::chrono::high_resolution_clock::now();
+        a.parallel_inverse_matrix(15);
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+        std::cout <<duration.count()<< std::endl;
+    }
     return 0;
 }

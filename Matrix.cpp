@@ -461,84 +461,6 @@ Matrix<T> Matrix<T>::create_identity_matrix(int size)
 }
 
 
-template <typename T>
-Matrix<T> Matrix<T>::parallel_multiply(int h) const
-{
-    Matrix<T> c(n, m);
-    int num_threads = std::thread::hardware_concurrency();
-    num_threads = (num_threads > n? n : num_threads);
-    std::vector<std::thread> threads(num_threads);
-    int block_size = n / num_threads;
-    int mod = n % num_threads;
-    int start = 0;
-    for (int i = 0; i < num_threads; i++)
-    {
-        int end = start + block_size + (i == 0 ? mod : 0);
-        threads[i] = std::thread([this, h, &c, start, end]()
-        {
-            for (int i = start; i < end; i++)
-            {
-                for (int j = 0; j < m; j++)
-                {
-                    c.matrix[i][j] += matrix[i][j] * h;
-                }
-            }
-        });
-        start = end;
-    }
-    for (int i = 0; i < num_threads; i++)
-    {
-        threads[i].join();
-    }
-    return c;
-}
-
-template <typename T>
-Matrix<T> Matrix<T>::parallel_sum(Matrix<T> const &b) const
-{
-     Matrix<T> c(b.n, b.m);
-    if (n != b.n || m != b.m)
-    {
-        std::cerr << "matrices of different sizes";
-        exit(1);
-    }
-    else
-    {
-        int num_threads = std::thread::hardware_concurrency();
-        num_threads = (num_threads > n? n : num_threads);
-        std::vector<std::thread> threads(num_threads);
-        int block_size = n / num_threads;
-        int mod = n % num_threads;
-        int start = 0;
-        std::mutex mtx;
-        for (int i = 0; i < num_threads; i++)
-        {
-            int end = start + block_size + (i == 0 ? mod : 0);
-            threads[i] = std::thread([this, &b, &c, start, end, &mtx]()
-            {
-                for (int i = start; i < end; i++)
-                {
-                    std::lock_guard<std::mutex> lock(mtx);
-                    for (int j = 0; j < m; j++)
-                    {
-                        c.matrix[i][j] = matrix[i][j] + b.matrix[i][j];
-
-                    }
-                }
-            });
-            start = end;
-        }
-        for (int i = 0; i < num_threads; i++)
-        {
-            threads[i].join();
-        }
-        return c;
-    }
-
-
-
-}
-
 
 
 /// Algorithms with threads ///
@@ -619,9 +541,83 @@ Matrix<T> Matrix<T>::parallel_inverse_matrix()
     return newm / det;
 }
 
+template <typename T>
+Matrix<T> Matrix<T>::parallel_sum(Matrix<T> const &b, int num_threads) const
+{
+     Matrix<T> c(b.n, b.m);
+    if (n != b.n || m != b.m)
+    {
+        std::cerr << "matrices of different sizes";
+        exit(1);
+    }
+    else
+    {
+        std::vector<std::thread> threads(num_threads);
+        int block_size = n / num_threads;
+        int mod = n % num_threads;
+        int start = 0;
+        std::mutex mtx;
+        for (int i = 0; i < num_threads; i++)
+        {
+            int end = start + block_size + (i == 0 ? mod : 0);
+            threads[i] = std::thread([this, &b, &c, start, end, &mtx]()
+            {
+                for (int i = start; i < end; i++)
+                {
+                    std::lock_guard<std::mutex> lock(mtx);
+                    for (int j = 0; j < m; j++)
+                    {
+                        c.matrix[i][j] = matrix[i][j] + b.matrix[i][j];
+
+                    }
+                }
+            });
+            start = end;
+        }
+        for (int i = 0; i < num_threads; i++)
+        {
+            threads[i].join();
+        }
+        return c;
+    }
+
+
+
+}
 
 template <typename T>
-Matrix<T> Matrix<T>::parallel_multiply_matrices(Matrix<T> const &a) const
+Matrix<T> Matrix<T>::parallel_multiply(int h, int num_threads) const
+{
+    Matrix<T> c(n, m);
+    std::vector<std::thread> threads(num_threads);
+    int block_size = n / num_threads;
+    int mod = n % num_threads;
+    int start = 0;
+    for (int i = 0; i < num_threads; i++)
+    {
+        int end = start + block_size + (i == 0 ? mod : 0);
+        threads[i] = std::thread([this, h, &c, start, end]()
+        {
+            for (int i = start; i < end; i++)
+            {
+                for (int j = 0; j < m; j++)
+                {
+                    c.matrix[i][j] += matrix[i][j] * h;
+                }
+            }
+        });
+        start = end;
+    }
+    for (int i = 0; i < num_threads; i++)
+    {
+        threads[i].join();
+    }
+    return c;
+}
+
+
+template <typename T>
+Matrix<T> Matrix<T>::parallel_multiply_matrices(Matrix<T> const &a, int num_threads) const
 {
     Matrix<T> result(std::min(a.n, n) , std::min(a.m,m));
      if (m != a.n)
@@ -631,8 +627,6 @@ Matrix<T> Matrix<T>::parallel_multiply_matrices(Matrix<T> const &a) const
     }
     else
     {
-        int num_threads = std::thread::hardware_concurrency();
-        num_threads = (num_threads > n? n : num_threads);
         std::vector<std::thread> threads(num_threads);
         int block_size = n / num_threads;
         int mod = n % num_threads;
@@ -679,11 +673,9 @@ Matrix<T> Matrix<T>::parallel_multiply_matrices(Matrix<T> const &a) const
 
 
 template <typename T>
-Matrix<T> Matrix<T>::async_multiply(int h) const
+Matrix<T> Matrix<T>::async_multiply(int h, int blocks) const
 {
     Matrix<T> result(n,m);
-    int blocks = std::thread::hardware_concurrency();
-    blocks = ( blocks > n ? n : blocks );
     int rows_in_block = n / blocks;
     std::vector<std::future<void>> futures(blocks);
     for (int i = 0; i < blocks; ++i) {
@@ -707,11 +699,9 @@ Matrix<T> Matrix<T>::async_multiply(int h) const
 }
 
 template <typename T>
-Matrix<T> Matrix<T>::async_sum(Matrix<T> b) const
+Matrix<T> Matrix<T>::async_sum(Matrix<T> const &b, int blocks) const
 {
     Matrix<T> result(n,m);
-    int blocks = std::thread::hardware_concurrency();
-    blocks = ( blocks > n ? n : blocks );
     int rows_in_block = n / blocks;
     std::vector<std::future<void>> futures(blocks);
     for (int i = 0; i < blocks; ++i) {
@@ -734,30 +724,45 @@ Matrix<T> Matrix<T>::async_sum(Matrix<T> b) const
     return result;
 }
 
+template <typename T>
+Matrix<T> Matrix<T>::async_multiply_matrices( Matrix<T> const &a, int blocks) const
+{
+    Matrix<T> result(n,m);
+    int rows_in_block = n / blocks;
+    std::vector<std::future<void>> futures(blocks);
+    for (int i = 0; i < blocks; ++i) {
+        futures[i] = std::async(std::launch::async, [this, &a , rows_in_block, blocks, &result, i]() {
+            int start_row = i * rows_in_block;
+            int end_row = (i == blocks - 1) ? n : (i + 1) * rows_in_block;
+            for (int row = 0; row < n; ++row)
+                {
+                    for (int col = 0; col < a.m; ++col)
+                    {
+                    T sum = 0;
+                    for (int k = 0; k < a.n; ++k)
+                    {
+                        sum += matrix[row][k] * a.matrix[k][col];
+                    }
+                    result.matrix[row][col] = sum;
+                    }
+                }
+            
+        });
+    }
+    for(auto& f : futures)
+    {
+        f.wait();
+    }
+    return result;
+}
+
 
 int main()
 {
     Matrix<double> a, b;
-    // a=Matrix<int>::create_zero_matrix(5);
-    // a.read_from_file("input.txt");
-    // b.read_from_file("input.txt");
-    // a.print_to_file();
-    // b.print_to_file();
-    int h=5789;
-    std::vector<std::string> v = {"2.txt","2.txt","3.txt","4.txt","5.txt"};
+    std::vector<std::string> v = {"1.txt","2.txt","3.txt","4.txt","5.txt"};
     a.read_from_file(v[0]);
-    // c = b.parallel_inverse_matrix();
-    for(int file = 0; file <= 4; ++file)
-    {
-        a.read_from_file(v[file]);
-        // Matrix<double> b = a;
-        auto start_time = std::chrono::high_resolution_clock::now();
-        a.parallel_inverse_matrix();
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
-        std::cout << duration.count()<< std::endl;
-        wait(&h);
-
-    }
+    b = a.async_multiply_matrices(a,3);
+    b.print();
     return 0;
 }

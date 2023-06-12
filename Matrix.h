@@ -13,9 +13,10 @@ class Matrix
 {
 private:
     std::vector<std::vector<T>> matrix;
+    int n, m;
+    int max_threads = std::thread::hardware_concurrency();
 
 public:
-    int n, m;
     Matrix(const std::string &);
     Matrix(int, int);
     Matrix(){};
@@ -28,18 +29,12 @@ public:
     Matrix operator*(Matrix const &) const;
     Matrix operator*(int) const;
     Matrix operator/(int) const;
-    Matrix async_sum(Matrix) const;
-    Matrix async_multiply(int) const;
-    Matrix parallel_multiply(int) const;
     Matrix operator+(Matrix const &) const;
-    Matrix parallel_sum(Matrix const &) const;
-    Matrix parallel_multiply_matrices(Matrix const &) const;
     Matrix operator-(Matrix const &) const;
     bool operator==(Matrix const &) const;
     bool operator==(int) const;
     Matrix operator!();
     double get_minor(int,int);
-    Matrix parallel_inverse_matrix();
     static Matrix create_zero_matrix(int);
     static Matrix create_identity_matrix(int);
     T operator()(int, int);
@@ -49,5 +44,19 @@ public:
     double parallel_get_det();
     void print_to_file();
     void read_from_file(const std::string &name);
+
+
+    Matrix parallel_multiply(int, int) const;
+    Matrix parallel_sum(Matrix const &, int) const;
+    Matrix parallel_multiply_matrices(Matrix const &, int) const;
+    Matrix parallel_inverse_matrix();
+
+
+    Matrix async_sum(Matrix const &, int) const;
+    Matrix async_multiply(int, int) const;
+    Matrix async_multiply_matrices(Matrix const &, int) const;
+
+
+
 };
 #endif
